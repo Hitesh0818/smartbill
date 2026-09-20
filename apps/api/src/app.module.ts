@@ -7,5 +7,17 @@ import { CustomersModule } from "./customers/customers.module";
 import { ProductsModule } from "./products/products.module";
 import { InvoicesModule } from "./invoices/invoices.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
-@Module({ imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule, FirmsModule, CustomersModule, ProductsModule, InvoicesModule, DashboardModule] })
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    AuthModule,
+    FirmsModule,
+    CustomersModule,
+    ProductsModule,
+    InvoicesModule,
+    DashboardModule,
+  ],
+})
 export class AppModule {}

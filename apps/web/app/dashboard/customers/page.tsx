@@ -1,1 +1,71 @@
-"use client"; import {useEffect,useState} from "react"; const api=process.env.NEXT_PUBLIC_API_URL||"http://localhost:4000/api"; export default function Customers(){const [rows,setRows]=useState<any[]>([]),[name,setName]=useState("");const h=()=>({Authorization:`Bearer ${localStorage.getItem("smartbill_token")}`,"x-firm-id":localStorage.getItem("smartbill_firm")||"","Content-Type":"application/json"});const load=()=>fetch(`${api}/customers`,{headers:h()}).then(r=>r.json()).then(setRows);useEffect(load,[]);async function add(e:React.FormEvent){e.preventDefault();await fetch(`${api}/customers`,{method:"POST",headers:h(),body:JSON.stringify({name})});setName("");load()}return <><h1 className="text-3xl font-bold">Customers</h1><form onSubmit={add} className="mt-6 flex max-w-xl gap-2"><input className="flex-1 rounded-lg border p-3" placeholder="Customer name" value={name} onChange={e=>setName(e.target.value)} required/><button className="rounded-lg bg-blue-600 px-5 font-semibold text-white">Add customer</button></form><div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm"><table className="w-full text-left"><thead className="bg-slate-50 text-sm text-slate-500"><tr><th className="p-4">Name</th><th>Phone</th><th>GSTIN</th><th>State</th></tr></thead><tbody>{rows.map(x=><tr key={x.id} className="border-t"><td className="p-4 font-medium">{x.name}</td><td>{x.phone||"—"}</td><td>{x.gstin||"—"}</td><td>{x.state||"—"}</td></tr>)}</tbody></table></div></>}
+"use client";
+import { useEffect, useState } from "react";
+
+const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+
+export default function CustomersPage() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [name, setName] = useState("");
+
+  const headers = () => ({
+    Authorization: `Bearer ${localStorage.getItem("smartbill_token")}`,
+    "x-firm-id": localStorage.getItem("smartbill_firm") || "",
+    "Content-Type": "application/json",
+  });
+
+  const load = () =>
+    fetch(`${api}/customers`, { headers: headers() })
+      .then((r) => r.json())
+      .then(setRows);
+
+  useEffect(load, []);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    await fetch(`${api}/customers`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ name }),
+    });
+    setName("");
+    load();
+  }
+
+  return (
+    <>
+      <h1 className="text-3xl font-bold">Customers</h1>
+      <form onSubmit={add} className="mt-6 flex max-w-xl gap-2">
+        <input
+          className="flex-1 rounded-lg border p-3"
+          placeholder="Customer name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+        <button className="rounded-lg bg-blue-600 px-5 font-semibold text-white">Add customer</button>
+      </form>
+      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
+        <table className="w-full text-left">
+          <thead className="bg-slate-50 text-sm text-slate-500">
+            <tr>
+              <th className="p-4">Name</th>
+              <th>Phone</th>
+              <th>GSTIN</th>
+              <th>State</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((x) => (
+              <tr key={x.id} className="border-t">
+                <td className="p-4 font-medium">{x.name}</td>
+                <td>{x.phone || "—"}</td>
+                <td>{x.gstin || "—"}</td>
+                <td>{x.state || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}

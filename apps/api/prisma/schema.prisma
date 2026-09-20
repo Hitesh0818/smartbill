@@ -1,149 +1,352 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
 
-enum UserRole { OWNER ADMIN STAFF ACCOUNTANT }
-enum InvoiceStatus { DRAFT ISSUED PARTIALLY_PAID PAID OVERDUE CANCELLED }
-enum PaymentMode { CASH BANK_TRANSFER UPI CARD CHEQUE OTHER }
-enum StockMovementType { OPENING_STOCK PURCHASE SALE SALE_RETURN PURCHASE_RETURN ADJUSTMENT_IN ADJUSTMENT_OUT }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  STAFF
+  ACCOUNTANT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum InvoiceType {
+  TAX_INVOICE
+  BILL_OF_SUPPLY
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
+enum PaymentMode {
+  CASH
+  BANK_TRANSFER
+  UPI
+  CARD
+  CHEQUE
+  OTHER
+}
+
+enum StockMovementType {
+  OPENING_STOCK
+  PURCHASE
+  SALE
+  SALE_RETURN
+  PURCHASE_RETURN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+}
 
 model User {
-  id String @id @default(cuid())
-  name String?
-  email String @unique
+  id           String       @id @default(cuid())
+  name         String?
+  email        String       @unique
+  phone        String?      @unique
   passwordHash String
-  createdAt DateTime @default(now())
-  memberships FirmMember[]
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  memberships  FirmMember[] @relation("FirmMembers")
   createdInvoices Invoice[] @relation("InvoiceCreator")
 }
+
 model Firm {
-  id String @id @default(cuid())
-  name String
-  gstin String? @unique
-  state String?
-  stateCode String?
-  invoicePrefix String @default("INV")
-  nextInvoiceNumber Int @default(1)
-  createdAt DateTime @default(now())
-  members FirmMember[]
-  customers Customer[]
-  products Product[]
-  invoices Invoice[]
-  payments Payment[]
-  stockMovements StockMovement[]
+  id                 String          @id @default(cuid())
+  name               String
+  legalName          String?
+  gstin              String?         @unique
+  pan                String?
+  email              String?
+  phone              String?
+  addressLine1       String?
+  addressLine2       String?
+  city               String?
+  state              String?
+  stateCode          String?
+  pincode            String?
+  logoUrl            String?
+  invoicePrefix      String          @default("INV")
+  nextInvoiceNumber  Int             @default(1)
+  financialYearStart Int             @default(4)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  members            FirmMember[]    @relation("FirmMembers")
+  customers          Customer[]
+  products           Product[]
+  invoices           Invoice[]
+  challans           DeliveryChallan[]
+  payments           Payment[]
+  expenses           Expense[]
+  stockMovements     StockMovement[]
+  bankAccounts       BankAccount[]
+  auditLogs          AuditLog[]
 }
+
 model FirmMember {
-  id String @id @default(cuid())
-  firmId String
-  userId String
-  role UserRole @default(STAFF)
-  firm Firm @relation(fields:[firmId], references:[id], onDelete:Cascade)
-  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
-  @@unique([firmId,userId])
+  id        String   @id @default(cuid())
+  firmId    String
+  userId    String
+  role      UserRole @default(STAFF)
+  createdAt DateTime @default(now())
+
+  firm      Firm     @relation("FirmMembers", fields: [firmId], references: [id], onDelete: Cascade)
+  user      User     @relation("FirmMembers", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([firmId, userId])
 }
+
 model Customer {
-  id String @id @default(cuid())
-  firmId String
-  name String
-  phone String?
-  email String?
-  gstin String?
+  id          String    @id @default(cuid())
+  firmId      String
+  name        String
+  phone       String?
+  email       String?
+  gstin       String?
+  pan         String?
   addressLine String?
-  state String?
-  stateCode String?
-  openingDue Decimal @default(0) @db.Decimal(14,2)
-  createdAt DateTime @default(now())
-  firm Firm @relation(fields:[firmId],references:[id],onDelete:Cascade)
-  invoices Invoice[]
-  payments Payment[]
-  @@index([firmId,name])
+  city        String?
+  state       String?
+  stateCode   String?
+  pincode     String?
+  creditLimit Decimal?  @db.Decimal(14, 2)
+  openingDue  Decimal   @default(0) @db.Decimal(14, 2)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  firm        Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  invoices    Invoice[]
+  payments    Payment[]
+
+  @@index([firmId, name])
 }
+
 model Product {
-  id String @id @default(cuid())
-  firmId String
-  name String
-  sku String?
-  unit String @default("PCS")
-  hsnSac String?
-  gstRate Decimal @default(18) @db.Decimal(5,2)
-  salePrice Decimal @default(0) @db.Decimal(14,2)
-  currentStock Decimal @default(0) @db.Decimal(14,3)
-  reorderLevel Decimal? @db.Decimal(14,3)
-  createdAt DateTime @default(now())
-  firm Firm @relation(fields:[firmId],references:[id],onDelete:Cascade)
-  invoiceItems InvoiceItem[]
+  id             String    @id @default(cuid())
+  firmId         String
+  name           String
+  sku            String?
+  barcode        String?
+  type           String    @default("PRODUCT")
+  unit           String    @default("PCS")
+  hsnSac         String?
+  gstRate        Decimal   @default(18) @db.Decimal(5, 2)
+  salePrice      Decimal   @default(0) @db.Decimal(14, 2)
+  purchasePrice  Decimal   @default(0) @db.Decimal(14, 2)
+  currentStock   Decimal   @default(0) @db.Decimal(14, 3)
+  reorderLevel   Decimal?  @db.Decimal(14, 3)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  firm           Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  invoiceItems   InvoiceItem[]
   stockMovements StockMovement[]
-  @@unique([firmId,sku])
-  @@index([firmId,name])
+
+  @@unique([firmId, sku])
+  @@index([firmId, name])
 }
+
 model Invoice {
-  id String @id @default(cuid())
-  firmId String
-  customerId String
-  createdById String
-  invoiceNumber String
-  invoiceDate DateTime @default(now())
-  dueDate DateTime?
-  status InvoiceStatus @default(ISSUED)
-  notes String?
-  subtotal Decimal @default(0) @db.Decimal(14,2)
-  discountTotal Decimal @default(0) @db.Decimal(14,2)
-  taxableTotal Decimal @default(0) @db.Decimal(14,2)
-  cgstTotal Decimal @default(0) @db.Decimal(14,2)
-  sgstTotal Decimal @default(0) @db.Decimal(14,2)
-  igstTotal Decimal @default(0) @db.Decimal(14,2)
-  taxTotal Decimal @default(0) @db.Decimal(14,2)
-  grandTotal Decimal @default(0) @db.Decimal(14,2)
-  amountPaid Decimal @default(0) @db.Decimal(14,2)
-  balanceDue Decimal @default(0) @db.Decimal(14,2)
-  createdAt DateTime @default(now())
-  firm Firm @relation(fields:[firmId],references:[id],onDelete:Cascade)
-  customer Customer @relation(fields:[customerId],references:[id])
-  createdBy User @relation("InvoiceCreator",fields:[createdById],references:[id])
-  items InvoiceItem[]
-  payments Payment[]
-  @@unique([firmId,invoiceNumber])
-  @@index([firmId,invoiceDate])
+  id                String        @id @default(cuid())
+  firmId            String
+  customerId        String
+  createdById       String
+  invoiceNumber     String
+  invoiceDate       DateTime      @default(now())
+  dueDate           DateTime?
+  type              InvoiceType   @default(TAX_INVOICE)
+  status            InvoiceStatus @default(DRAFT)
+  placeOfSupplyCode String?
+  notes             String?
+  terms             String?
+  subtotal          Decimal       @default(0) @db.Decimal(14, 2)
+  discountTotal     Decimal       @default(0) @db.Decimal(14, 2)
+  taxableTotal      Decimal       @default(0) @db.Decimal(14, 2)
+  cgstTotal         Decimal       @default(0) @db.Decimal(14, 2)
+  sgstTotal         Decimal       @default(0) @db.Decimal(14, 2)
+  igstTotal         Decimal       @default(0) @db.Decimal(14, 2)
+  taxTotal          Decimal       @default(0) @db.Decimal(14, 2)
+  grandTotal        Decimal       @default(0) @db.Decimal(14, 2)
+  amountPaid        Decimal       @default(0) @db.Decimal(14, 2)
+  balanceDue        Decimal       @default(0) @db.Decimal(14, 2)
+  pdfUrl            String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  firm              Firm          @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  customer          Customer      @relation(fields: [customerId], references: [id])
+  createdBy         User          @relation("InvoiceCreator", fields: [createdById], references: [id])
+  items             InvoiceItem[]
+  payments          Payment[]
+  challanLinks      ChallanInvoice[]
+
+  @@unique([firmId, invoiceNumber])
+  @@index([firmId, invoiceDate])
+  @@index([customerId, status])
 }
+
 model InvoiceItem {
-  id String @id @default(cuid())
+  id            String   @id @default(cuid())
+  invoiceId     String
+  productId     String?
+  name          String
+  description   String?
+  hsnSac        String?
+  quantity      Decimal  @db.Decimal(14, 3)
+  unit          String   @default("PCS")
+  unitPrice     Decimal  @db.Decimal(14, 2)
+  discountPct   Decimal  @default(0) @db.Decimal(5, 2)
+  discountAmt   Decimal  @default(0) @db.Decimal(14, 2)
+  taxableValue  Decimal  @default(0) @db.Decimal(14, 2)
+  gstRate       Decimal  @default(0) @db.Decimal(5, 2)
+  cgstAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  sgstAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  igstAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  total         Decimal  @default(0) @db.Decimal(14, 2)
+
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product       Product? @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+}
+
+model DeliveryChallan {
+  id            String   @id @default(cuid())
+  firmId        String
+  customerId    String
+  challanNumber String
+  challanDate   DateTime @default(now())
+  status        String   @default("OPEN")
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  firm          Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  customer      Customer @relation(fields: [customerId], references: [id])
+  items         ChallanItem[]
+  invoiceLinks  ChallanInvoice[]
+
+  @@unique([firmId, challanNumber])
+}
+
+model ChallanItem {
+  id          String   @id @default(cuid())
+  challanId   String
+  productId   String?
+  name        String
+  description String?
+  quantity    Decimal  @db.Decimal(14, 3)
+  unit        String   @default("PCS")
+  unitPrice   Decimal  @db.Decimal(14, 2)
+
+  challan     DeliveryChallan @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  product     Product?        @relation(fields: [productId], references: [id])
+
+  @@index([challanId])
+}
+
+model ChallanInvoice {
+  challanId String
   invoiceId String
-  productId String?
-  name String
-  hsnSac String?
-  quantity Decimal @db.Decimal(14,3)
-  unitPrice Decimal @db.Decimal(14,2)
-  discountPct Decimal @default(0) @db.Decimal(5,2)
-  discountAmt Decimal @default(0) @db.Decimal(14,2)
-  taxableValue Decimal @default(0) @db.Decimal(14,2)
-  gstRate Decimal @default(0) @db.Decimal(5,2)
-  cgstAmount Decimal @default(0) @db.Decimal(14,2)
-  sgstAmount Decimal @default(0) @db.Decimal(14,2)
-  igstAmount Decimal @default(0) @db.Decimal(14,2)
-  total Decimal @default(0) @db.Decimal(14,2)
-  invoice Invoice @relation(fields:[invoiceId],references:[id],onDelete:Cascade)
-  product Product? @relation(fields:[productId],references:[id])
+
+  challan   DeliveryChallan @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  invoice   Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@id([challanId, invoiceId])
 }
+
 model Payment {
-  id String @id @default(cuid())
-  firmId String
-  customerId String
-  invoiceId String?
-  amount Decimal @db.Decimal(14,2)
-  mode PaymentMode
-  reference String?
-  paymentDate DateTime @default(now())
-  firm Firm @relation(fields:[firmId],references:[id],onDelete:Cascade)
-  customer Customer @relation(fields:[customerId],references:[id])
-  invoice Invoice? @relation(fields:[invoiceId],references:[id])
+  id          String      @id @default(cuid())
+  firmId      String
+  customerId  String
+  invoiceId   String?
+  amount      Decimal     @db.Decimal(14, 2)
+  paymentDate DateTime    @default(now())
+  mode        PaymentMode
+  reference   String?
+  notes       String?
+  createdAt   DateTime    @default(now())
+
+  firm        Firm        @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
+
+  @@index([firmId, paymentDate])
 }
+
+model Expense {
+  id          String   @id @default(cuid())
+  firmId      String
+  category    String
+  amount      Decimal  @db.Decimal(14, 2)
+  expenseDate DateTime @default(now())
+  mode        PaymentMode
+  vendorName  String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([firmId, expenseDate])
+}
+
 model StockMovement {
-  id String @id @default(cuid())
-  firmId String
-  productId String
-  type StockMovementType
-  quantity Decimal @db.Decimal(14,3)
+  id          String            @id @default(cuid())
+  firmId      String
+  productId   String
+  type        StockMovementType
+  quantity    Decimal           @db.Decimal(14, 3)
   referenceId String?
-  createdAt DateTime @default(now())
-  firm Firm @relation(fields:[firmId],references:[id],onDelete:Cascade)
-  product Product @relation(fields:[productId],references:[id])
+  notes       String?
+  createdAt   DateTime          @default(now())
+
+  firm        Firm              @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  product     Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([firmId, createdAt])
+  @@index([productId, createdAt])
+}
+
+model BankAccount {
+  id             String   @id @default(cuid())
+  firmId         String
+  accountName    String
+  bankName       String?
+  accountNumber  String?
+  ifscCode       String?
+  upiId          String?
+  openingBalance Decimal  @default(0) @db.Decimal(14, 2)
+  createdAt      DateTime @default(now())
+
+  firm           Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  firmId      String
+  userId      String?
+  action      String
+  entityType  String?
+  entityId    String?
+  metadata    String?
+  createdAt   DateTime @default(now())
+
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([firmId, createdAt])
 }
