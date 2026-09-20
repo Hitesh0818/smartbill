@@ -1,0 +1,2 @@
+import { Controller, Get, Headers, Param, UseGuards } from "@nestjs/common"; import { JwtAuthGuard } from "../auth/jwt-auth.guard"; import { AuthUser } from "../auth/auth-user.decorator"; import { FirmsService } from "./firms.service";
+@UseGuards(JwtAuthGuard) @Controller("firms") export class FirmsController { constructor(private firms:FirmsService) {} @Get() list(@AuthUser() u:{sub:string}) { return this.firms.list(u.sub); } @Get(":firmId") get(@AuthUser() u:{sub:string}, @Param("firmId") firmId:string){ return this.firms.get(u.sub,firmId); } }
