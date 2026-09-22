@@ -1,191 +1,381 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
 
 const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
-type Item = {
-  productId?: string;
+type InvoiceItem = {
+  id: string;
   name: string;
-  quantity: number;
-  unitPrice: number;
-  gstRate: number;
-  discountPercent: number;
+  hsnSac?: string | null;
+  quantity: string | number;
+  unitPrice: string | number;
+  discountPct: string | number;
+  discountAmt: string | number;
+  taxableValue: string | number;
+  gstRate: string | number;
+  cgstAmount: string | number;
+  sgstAmount: string | number;
+  igstAmount: string | number;
+  total: string | number;
 };
 
-const empty = (): Item => ({ name: "", quantity: 1, unitPrice: 0, gstRate: 18, discountPercent: 0 });
+type Invoice = {
+  id: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate?: string | null;
+  type: string;
+  status: string;
+  notes?: string | null;
+  terms?: string | null;
+  subtotal: string | number;
+  discountTotal: string | number;
+  taxableTotal: string | number;
+  cgstTotal: string | number;
+  sgstTotal: string | number;
+  igstTotal: string | number;
+  taxTotal: string | number;
+  grandTotal: string | number;
+  amountPaid: string | number;
+  balanceDue: string | number;
+  customer: {
+    id: string;
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+    gstin?: string | null;
+    addressLine?: string | null;
+    state?: string | null;
+    stateCode?: string | null;
+    pincode?: string | null;
+  };
+  items: InvoiceItem[];
+};
 
-export default function NewInvoicePage() {
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [customerId, setCustomerId] = useState("");
-  const [items, setItems] = useState<Item[]>([empty()]);
+export default function InvoiceDetailPage() {
+  const params = useParams();
+  const invoiceId = params.id as string;
+
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const router = useRouter();
 
-  const headers = () => ({
+  const headers = {
     Authorization: `Bearer ${localStorage.getItem("smartbill_token")}`,
     "x-firm-id": localStorage.getItem("smartbill_firm") || "",
-    "Content-Type": "application/json",
-  });
+  };
 
   useEffect(() => {
-    fetch(`${api}/customers`, { headers: headers() })
-      .then((r) => r.json())
-      .then(setCustomers);
-    fetch(`${api}/products`, { headers: headers() })
-      .then((r) => r.json())
-      .then(setProducts);
-  }, []);
+    let isMounted = true;
 
-  const total = useMemo(
-    () =>
-      items.reduce((s, i) => {
-        const t = i.quantity * i.unitPrice * (1 - i.discountPercent / 100);
-        return s + t * (1 + i.gstRate / 100);
-      }, 0),
-    [items],
-  );
+    async function load() {
+      setIsLoading(true);
+      setError("");
 
-  function update(i: number, k: keyof Item, v: any) {
-    setItems((a) => a.map((x, n) => (n === i ? { ...x, [k]: v } : x)));
-  }
+      try {
+        const response = await fetch(`${api}/invoices`, { headers });
+        const payload = await response.json();
 
-  function choose(i: number, id: string) {
-    const p = products.find((x) => x.id === id);
-    if (p)
-      setItems((a) =>
-        a.map((x, n) =>
-          n === i ? { ...x, productId: id, name: p.name, unitPrice: Number(p.salePrice), gstRate: Number(p.gstRate) } : x,
-        ),
-      );
-  }
+        if (!response.ok) {
+          throw new Error(payload.message || "Unable to load invoices.");
+        }
 
-  async function save() {
-    setError("");
-    const r = await fetch(`${api}/invoices`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ customerId, items }),
-    });
-    if (!r.ok) {
-      const d = await r.json();
-      setError(d.message || "Could not create invoice");
-      return;
+        const found = payload.find((inv: Invoice) => inv.id === invoiceId);
+
+        if (!found) {
+          throw new Error("Invoice not found.");
+        }
+
+        if (isMounted) {
+          setInvoice(found);
+        }
+      } catch (requestError) {
+        if (isMounted) {
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to load invoice.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     }
-    router.push("/dashboard/invoices");
+
+    void load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [invoiceId]);
+
+  if (isLoading) {
+    return (
+      <div className="p-6 text-sm text-slate-500">
+        Loading invoice...
+      </div>
+    );
   }
+
+  if (error || !invoice) {
+    return (
+      <div className="p-6">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error || "Invoice not found."}
+        </div>
+        <div className="mt-4">
+          <Link
+            href="/dashboard/invoices"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+          >
+            Back to invoices
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isInterState = Number(invoice.igstTotal) > 0;
 
   return (
-    <>
-      <h1 className="text-3xl font-bold">Create invoice</h1>
-      {error && <p className="mt-4 rounded bg-red-50 p-3 text-red-700">{error}</p>}
-      <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
-        <label className="block max-w-md font-medium">
-          Customer
-          <select
-            className="mt-2 w-full rounded-lg border p-3"
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          >
-            <option value="">Select customer</option>
-            {customers.map((c) => (
-              <option value={c.id} key={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="mt-8 overflow-x-auto">
-          <table className="w-full min-w-[760px]">
-            <thead className="text-left text-sm text-slate-500">
-              <tr>
-                <th>Product</th>
-                <th>Qty</th>
-                <th>Rate</th>
-                <th>Disc %</th>
-                <th>GST %</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((x, i) => (
-                <tr key={i} className="border-t">
-                  <td className="py-3">
-                    <select
-                      className="w-56 rounded border p-2"
-                      value={x.productId || ""}
-                      onChange={(e) => choose(i, e.target.value)}
-                    >
-                      <option value="">Custom item</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="ml-2 rounded border p-2"
-                      value={x.name}
-                      placeholder="Item name"
-                      onChange={(e) => update(i, "name", e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="w-20 rounded border p-2"
-                      type="number"
-                      value={x.quantity}
-                      onChange={(e) => update(i, "quantity", Number(e.target.value))}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="w-24 rounded border p-2"
-                      type="number"
-                      value={x.unitPrice}
-                      onChange={(e) => update(i, "unitPrice", Number(e.target.value))}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="w-20 rounded border p-2"
-                      type="number"
-                      value={x.discountPercent}
-                      onChange={(e) => update(i, "discountPercent", Number(e.target.value))}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      className="rounded border p-2"
-                      value={x.gstRate}
-                      onChange={(e) => update(i, "gstRate", Number(e.target.value))}
-                    >
-                      {[0, 3, 5, 12, 18, 28].map((v) => (
-                        <option key={v}>{v}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>₹{(x.quantity * x.unitPrice * (1 - x.discountPercent / 100) * (1 + x.gstRate / 100)).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-blue-600">
+            INVOICE {invoice.invoiceNumber}
+          </p>
+          <h1 className="mt-1 text-3xl font-bold text-slate-900">
+            {invoice.customer.name}
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            {invoice.invoiceDate
+              ? new Date(invoice.invoiceDate).toLocaleDateString("en-IN")
+              : "—"}
+          </p>
         </div>
-        <button onClick={() => setItems([...items, empty()])} className="mt-5 rounded-lg border border-blue-600 px-4 py-2 text-blue-700">
-          + Add item
-        </button>
-        <div className="mt-8 flex items-center justify-between border-t pt-5">
-          <p className="text-xl font-bold">Grand total: ₹{total.toFixed(2)}</p>
-          <button
-            onClick={save}
-            disabled={!customerId || items.some((i) => !i.name)}
-            className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white disabled:opacity-50"
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/invoices"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
           >
-            Create invoice
+            Back to invoices
+          </Link>
+
+          <button
+            onClick={() => window.print()}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+          >
+            Print
           </button>
         </div>
       </div>
-    </>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <h2 className="text-lg font-bold text-slate-900">
+            Invoice items
+          </h2>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Item</th>
+                  <th className="px-4 py-3">HSN/SAC</th>
+                  <th className="px-4 py-3 text-right">Qty</th>
+                  <th className="px-4 py-3 text-right">Rate</th>
+                  <th className="px-4 py-3 text-right">Disc %</th>
+                  <th className="px-4 py-3 text-right">Taxable</th>
+                  <th className="px-4 py-3 text-right">GST</th>
+                  <th className="px-4 py-3 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.items.map((item) => (
+                  <tr key={item.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {item.name}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {item.hsnSac || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600">
+                      {item.quantity}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600">
+                      ₹{Number(item.unitPrice).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600">
+                      {item.discountPct}%
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600">
+                      ₹{Number(item.taxableValue).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600">
+                      {item.gstRate}%
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium text-slate-900">
+                      ₹{Number(item.total).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside className="space-y-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900">
+              Customer details
+            </h2>
+
+            <div className="mt-4 space-y-2 text-sm">
+              <div>
+                <p className="font-medium text-slate-700">
+                  {invoice.customer.name}
+                </p>
+                <p className="text-slate-600">
+                  {invoice.customer.addressLine || "—"}
+                </p>
+                <p className="text-slate-600">
+                  {[
+                    invoice.customer.city,
+                    invoice.customer.state,
+                    invoice.customer.pincode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ") || "—"}
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <p className="text-slate-600">
+                  GSTIN: {invoice.customer.gstin || "—"}
+                </p>
+                <p className="text-slate-600">
+                  Phone: {invoice.customer.phone || "—"}
+                </p>
+                <p className="text-slate-600">
+                  Email: {invoice.customer.email || "—"}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900">
+              Invoice totals
+            </h2>
+
+            <div className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between text-slate-600">
+                <span>Subtotal</span>
+                <span>₹{Number(invoice.subtotal).toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between text-slate-600">
+                <span>Discount</span>
+                <span>₹{Number(invoice.discountTotal).toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between font-medium text-slate-900">
+                <span>Taxable amount</span>
+                <span>₹{Number(invoice.taxableTotal).toFixed(2)}</span>
+              </div>
+
+              <div className="border-t border-slate-200 pt-2">
+                {isInterState ? (
+                  <div className="flex justify-between text-slate-600">
+                    <span>IGST</span>
+                    <span>₹{Number(invoice.igstTotal).toFixed(2)}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-slate-600">
+                      <span>CGST</span>
+                      <span>₹{Number(invoice.cgstTotal).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>SGST</span>
+                      <span>₹{Number(invoice.sgstTotal).toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex justify-between font-medium text-slate-900">
+                <span>Tax total</span>
+                <span>₹{Number(invoice.taxTotal).toFixed(2)}</span>
+              </div>
+
+              <div className="border-t border-slate-200 pt-2">
+                <div className="flex justify-between text-lg font-bold text-slate-900">
+                  <span>Grand total</span>
+                  <span>₹{Number(invoice.grandTotal).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 pt-2">
+                <div className="flex justify-between text-slate-600">
+                  <span>Amount paid</span>
+                  <span>₹{Number(invoice.amountPaid).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Balance due</span>
+                  <span>₹{Number(invoice.balanceDue).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                    invoice.status === "PAID"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : invoice.status === "PARTIALLY_PAID"
+                        ? "bg-amber-100 text-amber-700"
+                        : invoice.status === "OVERDUE"
+                          ? "bg-rose-100 text-rose-700"
+                          : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {invoice.status}
+                </span>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      {invoice.notes || invoice.terms ? (
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:block">
+          <h2 className="text-lg font-bold text-slate-900">
+            Notes & terms
+          </h2>
+          <div className="mt-3 space-y-2 text-sm text-slate-600">
+            {invoice.notes ? (
+              <p>
+                <span className="font-medium text-slate-700">Notes:</span>{" "}
+                {invoice.notes}
+              </p>
+            ) : null}
+            {invoice.terms ? (
+              <p>
+                <span className="font-medium text-slate-700">
+                  Terms:
+                </span>{" "}
+                {invoice.terms}
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }

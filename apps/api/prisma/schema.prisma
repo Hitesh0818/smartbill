@@ -131,6 +131,7 @@ model Customer {
   firm        Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
   invoices    Invoice[]
   payments    Payment[]
+  challans    DeliveryChallan[]
 
   @@index([firmId, name])
 }
@@ -156,6 +157,7 @@ model Product {
   firm           Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
   invoiceItems   InvoiceItem[]
   stockMovements StockMovement[]
+  challanItems   ChallanItem[]
 
   @@unique([firmId, sku])
   @@index([firmId, name])
